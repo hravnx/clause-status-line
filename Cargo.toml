@@ -3,6 +3,7 @@ name = "claude-status-line"
 description = "A tuned status line for Claude Code in the terminal"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 serde_json = "1"
