@@ -2,6 +2,9 @@ use std::io::{self, Read};
 
 const ANSI_RESET: &str = "\x1b[0m";
 const ANSI_FG_BLACK: &str = "\x1b[38;5;0m";
+const ANSI_FG_WHITE: &str = "\x1b[38;5;15m";
+const ANSI_BG_BLUE: &str = "\x1b[48;5;24m";
+const ANSI_BG_PURPLE: &str = "\x1b[48;5;60m";
 const ANSI_BG_GREEN: &str = "\x1b[48;5;34m";
 const ANSI_BG_YELLOW: &str = "\x1b[48;5;220m";
 const ANSI_BG_RED: &str = "\x1b[48;5;196m";
@@ -21,10 +24,24 @@ fn format_percentage_segment(label: &str, value: f64) -> String {
     )
 }
 
+fn format_model_segment(model_name: &str, effort_level: &str) -> String {
+    format!("{ANSI_BG_BLUE}{ANSI_FG_WHITE} {model_name}|{effort_level} {ANSI_RESET}")
+}
+
+fn format_branch_segment(branch: &str) -> String {
+    format!("{ANSI_BG_PURPLE}{ANSI_FG_WHITE} {branch} {ANSI_RESET}")
+}
+
 fn percentage_at(json: &serde_json::Value, path: &[&str]) -> Option<f64> {
     path.iter()
         .try_fold(json, |value, key| value.get(*key))
         .and_then(|value| value.as_f64())
+}
+
+fn string_at<'a>(json: &'a serde_json::Value, path: &[&str]) -> Option<&'a str> {
+    path.iter()
+        .try_fold(json, |value, key| value.get(*key))
+        .and_then(|value| value.as_str())
 }
 
 fn main() {
@@ -39,6 +56,10 @@ fn main() {
 
     let mut segments = Vec::new();
 
+    if let Some(branch) = string_at(&json, &["worktree", "branch"]) {
+        segments.push(format_branch_segment(branch));
+    }
+
     if let Some(value) = percentage_at(&json, &["context_window", "used_percentage"]) {
         segments.push(format_percentage_segment("ctx", value));
     }
@@ -49,6 +70,13 @@ fn main() {
 
     if let Some(value) = percentage_at(&json, &["rate_limits", "seven_day", "used_percentage"]) {
         segments.push(format_percentage_segment("7d", value));
+    }
+
+    if let (Some(model_name), Some(effort_level)) = (
+        string_at(&json, &["model", "display_name"]),
+        string_at(&json, &["effort", "level"]),
+    ) {
+        segments.push(format_model_segment(model_name, effort_level));
     }
 
     if !segments.is_empty() {
