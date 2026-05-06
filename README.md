@@ -18,6 +18,27 @@ Percentage segments are rounded up and colored by usage:
 
 ## Usage
 
+Build and install the binary somewhere on your `PATH`:
+
+```bash
+cargo install --path .
+```
+
+Then configure Claude Code to use it as a status line in
+`~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "claude-status-line"
+  }
+}
+```
+
+Claude Code passes status JSON on stdin. You can test the formatter locally
+with the included fixture:
+
 ```bash
 claude-status-line < tests/fixtures/schema.json
 ```
