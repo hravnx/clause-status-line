@@ -19,20 +19,20 @@ Percentage segments are rounded up and colored by usage:
 ## Usage
 
 ```bash
-claude-status-line < schema.json
+claude-status-line < tests/fixtures/schema.json
 ```
 
 Example output includes ANSI styling and segments like:
 
 ```text
-Opus|high worktree-my-feature ctx 81% 5h 24% 7d 42%
+worktree-my-feature ctx 81% 5h 24% 7d 42% Opus|high
 ```
 
 ## Development
 
 ```bash
 cargo test
-cargo run --quiet < schema.json
+cargo run --quiet < tests/fixtures/schema.json
 ```
 
 ## License
