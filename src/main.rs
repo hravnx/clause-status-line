@@ -65,12 +65,19 @@ fn git_branch(cwd: &str) -> Option<String> {
     }
 }
 
-fn active_branch(json: &serde_json::Value) -> Option<String> {
+fn active_branch_with<F>(json: &serde_json::Value, git_branch: F) -> Option<String>
+where
+    F: Fn(&str) -> Option<String>,
+{
     string_at(json, &["worktree", "branch"])
         .filter(|branch| !branch.is_empty())
         .map(str::to_string)
-        .or_else(|| string_at(json, &["cwd"]).and_then(git_branch))
+        .or_else(|| string_at(json, &["cwd"]).and_then(&git_branch))
         .or_else(|| string_at(json, &["workspace", "current_dir"]).and_then(git_branch))
+}
+
+fn active_branch(json: &serde_json::Value) -> Option<String> {
+    active_branch_with(json, git_branch)
 }
 
 fn main() {
@@ -110,5 +117,108 @@ fn main() {
 
     if !segments.is_empty() {
         println!("{}", segments.join(" "));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn formats_percentage_segments_with_threshold_colors() {
+        assert_eq!(
+            format_percentage_segment("ctx", 50.0),
+            "\x1b[48;5;34m\x1b[38;5;0m ctx 50% \x1b[0m"
+        );
+        assert_eq!(
+            format_percentage_segment("ctx", 50.1),
+            "\x1b[48;5;220m\x1b[38;5;0m ctx 51% \x1b[0m"
+        );
+        assert_eq!(
+            format_percentage_segment("ctx", 80.0),
+            "\x1b[48;5;220m\x1b[38;5;0m ctx 80% \x1b[0m"
+        );
+        assert_eq!(
+            format_percentage_segment("ctx", 80.1),
+            "\x1b[48;5;196m\x1b[38;5;0m ctx 81% \x1b[0m"
+        );
+    }
+
+    #[test]
+    fn formats_model_and_branch_segments() {
+        assert_eq!(
+            format_model_segment("Opus", "high"),
+            "\x1b[48;5;24m\x1b[38;5;15m Opus|high \x1b[0m"
+        );
+        assert_eq!(
+            format_branch_segment("main"),
+            "\x1b[48;5;60m\x1b[38;5;15m main \x1b[0m"
+        );
+    }
+
+    #[test]
+    fn reads_nested_percentages_and_strings() {
+        let status = json!({
+            "context_window": { "used_percentage": 42.5 },
+            "model": { "display_name": "Sonnet" }
+        });
+
+        assert_eq!(
+            percentage_at(&status, &["context_window", "used_percentage"]),
+            Some(42.5)
+        );
+        assert_eq!(
+            string_at(&status, &["model", "display_name"]),
+            Some("Sonnet")
+        );
+        assert_eq!(percentage_at(&status, &["missing"]), None);
+        assert_eq!(
+            string_at(&status, &["context_window", "used_percentage"]),
+            None
+        );
+    }
+
+    #[test]
+    fn prefers_worktree_branch_over_git_fallback() {
+        let status = json!({
+            "cwd": "/repo",
+            "worktree": { "branch": "worktree-feature" }
+        });
+
+        let branch = active_branch_with(&status, |_| Some("main".to_string()));
+
+        assert_eq!(branch, Some("worktree-feature".to_string()));
+    }
+
+    #[test]
+    fn falls_back_to_cwd_git_branch() {
+        let status = json!({
+            "cwd": "/repo",
+            "workspace": { "current_dir": "/workspace" }
+        });
+
+        let branch = active_branch_with(&status, |cwd| {
+            assert_eq!(cwd, "/repo");
+            Some("main".to_string())
+        });
+
+        assert_eq!(branch, Some("main".to_string()));
+    }
+
+    #[test]
+    fn falls_back_to_workspace_current_dir_when_cwd_git_fails() {
+        let status = json!({
+            "cwd": "/not-a-repo",
+            "workspace": { "current_dir": "/repo" }
+        });
+
+        let branch = active_branch_with(&status, |cwd| match cwd {
+            "/not-a-repo" => None,
+            "/repo" => Some("develop".to_string()),
+            _ => panic!("unexpected cwd: {cwd}"),
+        });
+
+        assert_eq!(branch, Some("develop".to_string()));
     }
 }
